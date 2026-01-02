@@ -16,6 +16,16 @@ from common.net_utils import recv_exact
 from client.strategy import DeckCounter, choose_decision
 
 
+def format_card(rank, suit):
+    # Helper to format a card for printing
+    suits = {0: "♥", 1: "♦", 2: "♣", 3: "♠"}  # Hearts, Diamonds, Clubs, Spades
+    ranks = {1: "A", 11: "J", 12: "Q", 13: "K"}
+
+    r_str = ranks.get(rank, str(rank))  # Default to number if not face card
+    s_str = suits.get(suit, "?")
+    return f"[{r_str}{s_str}]"
+
+
 def main():
     team_name = "RanTeam"
 
@@ -85,14 +95,20 @@ def main():
         # 2) Connect and Play Session
         print(f"[CLIENT] Connecting to {server_ip}:{server_port}...")
         try:
-            tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            tcp_sock.connect((server_ip, server_port))
+            tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # TCP socket
+            tcp_sock.settimeout(15.0)  # 15 seconds timeout for connect
+            tcp_sock.connect((server_ip, server_port))  # connect to server
 
             # Send request
             tcp_sock.sendall(pack_request(rounds, team_name))
             print(f"[CLIENT] Sent request: rounds={rounds} team='{team_name}'")
 
-            wins = 0  # Initialize win counter
+            # Play session statistics
+            stats = {
+                "wins": 0,
+                "losses": 0,
+                "ties": 0
+            }
 
             # 3) Play rounds logic
             deck_counter = DeckCounter()
@@ -123,7 +139,7 @@ def main():
                         dealer_up_rank = r
                         who = "DEALER_UP"
 
-                    print(f"[CLIENT] {who}: result={res} rank={r} suit={s}")
+                    print(f"[CLIENT] {who}: {format_card(r, s)}") # format card
 
                 player_turn = True
                 last_decision = None
@@ -158,22 +174,50 @@ def main():
                     else:
                         who = "DEALER_EVENT"
 
-                    print(f"[CLIENT] {who}: result={res} rank={rank} suit={suit}")
+                    # Print card event
+                    card_str = format_card(rank, suit)
+                    if res != 0:
+                        # final card event
+                        print(f"[CLIENT] {who} (Final): {card_str}")
+                    else:
+                        # regular card event
+                        print(f"[CLIENT] {who}: {card_str}")
+
 
                     if res != 0:
-                        outcome = {1: "TIE", 2: "LOSS", 3: "WIN"}.get(res, f"RES={res}")
-                        print(f"[CLIENT] Round ended -> {outcome}")
+                        # Round ended (1=tie,2=loss,3=win)
+                        outcome = "UNKNOWN"
+                        if res == 1:
+                            outcome = "TIE"
+                            stats["ties"] += 1
+                        elif res == 2:
+                            outcome = "LOSS"
+                            stats["losses"] += 1
+                        elif res == 3:
+                            outcome = "WIN"
+                            stats["wins"] += 1
 
-                        if res == 3:
-                            wins += 1
+                        print(f"[CLIENT] Round ended -> {outcome}")
                         break
 
             tcp_sock.close()
 
-            win_rats = (wins / rounds) * 100 if rounds > 0 else 0
-            print(f"[CLIENT] Finished playing {rounds} rounds, win rate: {win_rats:.1f}%")
+            print("\n" + "=" * 30)
+            print(f"SESSION SUMMARY ({rounds} rounds)")
+            print("=" * 30)
+            print(f"Wins:   {stats['wins']}")
+            print(f"Losses: {stats['losses']}")
+            print(f"Ties:   {stats['ties']}")
+
+            win_rate = (stats['wins'] / rounds) * 100 if rounds > 0 else 0
+            print(f"Win Rate: {win_rate:.1f}%")
+            print("=" * 30 + "\n")
 
             print("[CLIENT] Session finished. Returning to listen state...\n")
+
+        except socket.timeout:
+            print("\n[CLIENT] Error: Server stopped responding (Timeout).")
+            print("[CLIENT] Returning to listen state...\n")
 
         except Exception as e:
             print(f"[CLIENT] Error during session: {e}")

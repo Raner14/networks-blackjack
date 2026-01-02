@@ -1,6 +1,7 @@
 import socket
 import select
 import time
+import threading
 
 from common.constants import (
     OFFER_BROADCAST_UDP_PORT,
@@ -71,6 +72,38 @@ def play_session_blackjack(client_sock: socket.socket, rounds: int) -> None:
                 break
 
 
+def handle_client(client_sock: socket.socket, client_addr):
+    """
+    Handle a connected client in a separate thread.
+    1) Read and parse the request.
+    2) Play the blackjack session.
+    3) Close the client socket.
+    """
+    print(f"[SERVER] Handling client {client_addr} in a new thread")
+    try:
+        # read + parse request
+        req_bytes = recv_exact(client_sock, REQUEST_MESSAGE_BYTES)
+        req = unpack_request(req_bytes)
+
+        if req is None:
+            print(f"[SERVER] Invalid request received from {client_addr}")
+            return
+
+        rounds = req["rounds"]
+        team = req["client_team_name"]
+        print(f"[SERVER] Request OK: rounds={rounds} team='{team}'")
+
+        # play blackjack session
+        play_session_blackjack(client_sock, rounds)
+        print(f"[SERVER] Finished session with {client_addr}")
+
+    except Exception as e:
+        print(f"[SERVER] Error handling client {client_addr}: {e}")
+    finally:
+        # close the client socket
+        client_sock.close()
+
+
 def main():
     server_name = "RanServer"
 
@@ -107,25 +140,34 @@ def main():
                 client_sock, client_addr = tcp_listen.accept()
                 print(f"[SERVER] TCP client connected from {client_addr}")
 
-                try:
-                    # read + parse request
-                    req_bytes = recv_exact(client_sock, REQUEST_MESSAGE_BYTES)
-                    req = unpack_request(req_bytes)
+                # handle client in a separate thread
+                client_thread = threading.Thread(
+                    target=handle_client,
+                    args=(client_sock, client_addr),
+                    daemon=True
+                )
+                client_thread.start()
 
-                    if req is None:
-                        print("[SERVER] Invalid request received")
-                        continue
 
-                    rounds = req["rounds"]
-                    team = req["client_team_name"]
-                    print(f"[SERVER] Request OK: rounds={rounds} team='{team}'")
-
-                    # play blackjack session
-                    play_session_blackjack(client_sock, rounds)
-
-                finally:
-                    client_sock.close()
-                    print("[SERVER] Client disconnected, back to broadcasting...")
+                # try:
+                #     # read + parse request
+                #     req_bytes = recv_exact(client_sock, REQUEST_MESSAGE_BYTES)
+                #     req = unpack_request(req_bytes)
+                #
+                #     if req is None:
+                #         print("[SERVER] Invalid request received")
+                #         continue
+                #
+                #     rounds = req["rounds"]
+                #     team = req["client_team_name"]
+                #     print(f"[SERVER] Request OK: rounds={rounds} team='{team}'")
+                #
+                #     # play blackjack session
+                #     play_session_blackjack(client_sock, rounds)
+                #
+                # finally:
+                #     client_sock.close()
+                #     print("[SERVER] Client disconnected, back to broadcasting...")
 
     except KeyboardInterrupt:
         print("\n[SERVER] Stopped.")

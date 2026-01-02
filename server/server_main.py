@@ -27,9 +27,9 @@ def play_session_blackjack(client_sock: socket.socket, rounds: int) -> None:
     Plays `rounds` blackjack rounds with one connected client.
     Uses server/game.py for rules + state.
     """
-    deck = Deck()
 
     for round_i in range(rounds):
+        deck = Deck()
         game = BlackjackRound(deck)
 
         # 1) Initial deal: send 3 payloads (player, player, dealer upcard)

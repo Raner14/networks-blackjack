@@ -81,6 +81,8 @@ def main():
             tcp_sock.sendall(pack_request(rounds, team_name))
             print(f"[CLIENT] Sent request: rounds={rounds} team='{team_name}'")
 
+            wins = 0  # Initialize win counter
+
             # 3) Play rounds logic
             deck_counter = DeckCounter()
 
@@ -150,9 +152,16 @@ def main():
                     if res != 0:
                         outcome = {1: "TIE", 2: "LOSS", 3: "WIN"}.get(res, f"RES={res}")
                         print(f"[CLIENT] Round ended -> {outcome}")
+
+                        if res == 3:
+                            wins += 1
                         break
 
             tcp_sock.close()
+
+            win_rats = (wins / rounds) * 100 if rounds > 0 else 0
+            print(f"[CLIENT] Finished playing {rounds} rounds, win rate: {win_rats:.1f}%")
+
             print("[CLIENT] Session finished. Returning to listen state...\n")
 
         except Exception as e:

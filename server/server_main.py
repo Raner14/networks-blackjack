@@ -72,7 +72,7 @@ def play_session_blackjack(client_sock: socket.socket, rounds: int) -> None:
 
 
 def main():
-    server_name = "RanServer"  # תשנה לשם השרת שלכם
+    server_name = "RanServer"
 
     # --- TCP listen socket (publish its port in the offer) ---
     tcp_listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

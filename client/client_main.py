@@ -20,12 +20,23 @@ def main():
     team_name = "RanTeam"
 
     # 1. Ask user for input (Instruction Requirement)
-    try:
+    while True:
         user_input = input("Please enter number of rounds to play: ")
-        rounds = int(user_input)
-    except ValueError:
-        print("Invalid input, defaulting to 3 rounds.")
-        rounds = 3
+        try:
+            rounds = int(user_input)
+        except ValueError:
+            print("Invalid input, defaulting to 3 rounds.")
+            rounds = 3
+            break
+
+        if rounds > 255:
+            print("Error: Cannot play more than 255 rounds because the protocol uses only 1 byte. Please choose again.")
+            continue
+
+        break
+
+
+
 
     # 2. Run forever (Instruction Requirement)
     while True:

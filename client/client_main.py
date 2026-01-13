@@ -155,6 +155,9 @@ def main():
             tcp_sock.settimeout(15.0)  # 15 seconds timeout for connect
             tcp_sock.connect((server_ip, server_port))  # connect to server
 
+            client_port = tcp_sock.getsockname()[1]
+            print(f"[CLIENT] Connected from local port {client_port}")
+
             # Send request
             tcp_sock.sendall(pack_request(rounds, team_name))
             print(f"[CLIENT] Sent request: rounds={rounds} team='{team_name}'")

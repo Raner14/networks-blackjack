@@ -13,43 +13,99 @@ from common.protocol import (
 )
 from common.net_utils import recv_exact
 
-from client.strategy import DeckCounter, choose_decision
+from client.strategy import DeckCounter, choose_decision, hand_value
+
+from colorama import init, Fore, Style
+init(autoreset=True)  # Auto-reset colors after each print
 
 
 def format_card(rank, suit):
-    # Helper to format a card for printing
-    suits = {0: "♥", 1: "♦", 2: "♣", 3: "♠"}  # Hearts, Diamonds, Clubs, Spades
+    """Format card with colors: Red for ♥♦, Black for ♣♠"""
+    suits = {0: "♥", 1: "♦", 2: "♣", 3: "♠"}
     ranks = {1: "A", 11: "J", 12: "Q", 13: "K"}
 
-    r_str = ranks.get(rank, str(rank))  # Default to number if not face card
+    r_str = ranks.get(rank, str(rank))
     s_str = suits.get(suit, "?")
-    return f"[{r_str}{s_str}]"
+
+    # Red suits (Hearts, Diamonds), Black suits (Clubs, Spades)
+    if suit in (0, 1):  # Hearts, Diamonds
+        color = Fore.RED
+    else:  # Clubs, Spades
+        color = Fore.WHITE
+
+    return f"{color}[{r_str}{s_str}]{Style.RESET_ALL}"
 
 
 def main():
     team_name = "RanTeam"
 
     # 1. Ask user for input (Instruction Requirement)
-    while True:
-        user_input = input("Please enter number of rounds to play: ")
-        try:
-            rounds = int(user_input)
-        except ValueError:
-            print("Invalid input, defaulting to 3 rounds.")
-            rounds = 3
-            break
-
-        if rounds > 255:
-            print("Error: Cannot play more than 255 rounds because the protocol uses only 1 byte. Please choose again.")
-            continue
-
-        break
-
-
-
+    # while True:
+    #     user_input = input("Please enter number of rounds to play: ")
+    #     try:
+    #         rounds = int(user_input)
+    #     except ValueError:
+    #         print("Invalid input, defaulting to 3 rounds.")
+    #         rounds = 3
+    #         break
+    #
+    #     if rounds > 255:
+    #         print("Error: Cannot play more than 255 rounds because the protocol uses only 1 byte. Please choose again.")
+    #         continue
+    #
+    #     break
 
     # 2. Run forever (Instruction Requirement)
     while True:
+        # 🆕 NEW: Ask for rounds at the start of each session
+        print("\n" + Fore.CYAN + "=" * 60)
+        print("🎮 NEW SESSION - Ready to connect to a server")
+        print("=" * 60 + Style.RESET_ALL)
+
+        while True:
+            user_input = input("Enter number of rounds to play (or 'q' to quit): ")
+
+            # Allow quitting
+            if user_input.lower() == 'q':
+                print("[CLIENT] Exiting...")
+                return
+
+            try:
+                rounds = int(user_input)
+            except ValueError:
+                print("❌ Invalid input. Please enter a number or 'q' to quit.")
+                continue
+
+            # Validate rounds
+            if rounds <= 0:
+                print("❌ Error: Must play at least 1 round.")
+                continue
+
+            if rounds > 255:
+                print("❌ Error: Cannot play more than 255 rounds (protocol limit).")
+                continue
+
+            break  # Valid input, proceed
+
+
+        # 🆕 Select game mode (שורה 65 החדשה)
+        print("\nSelect game mode:")
+        print("  1) AUTO - Strategy plays automatically")
+        print("  2) MANUAL - You decide each move")
+
+        while True:
+            mode_input = input("Enter mode (1 or 2): ").strip()
+            if mode_input == '1':
+                auto_mode = True
+                print("[CLIENT] Mode: AUTO\n")
+                break
+            elif mode_input == '2':
+                auto_mode = False
+                print("[CLIENT] Mode: MANUAL\n")
+                break
+            else:
+                print("❌ Invalid choice. Enter 1 or 2.")
+
         print(f"[CLIENT] Listening for offers on UDP {OFFER_BROADCAST_UDP_PORT}...")
 
         # --- UDP listen for offers ---
@@ -147,10 +203,44 @@ def main():
                 while True:
                     # If it's still player turn, decide and send decision
                     if player_turn:
-                        decision = choose_decision(player_ranks, dealer_up_rank, deck_counter)
+                        # 🆕 Mode-based decision
+                        if auto_mode:
+                            # Automatic strategy
+                            decision = choose_decision(player_ranks, dealer_up_rank, deck_counter)
+                            dec_color = Fore.GREEN if decision == "Stand" else Fore.YELLOW
+                            print(f"[CLIENT] {dec_color}AUTO decision -> {decision}{Style.RESET_ALL}")
+                        else:
+                            # Manual mode
+                            total, soft = hand_value(player_ranks)
+                            soft_str = f"{Fore.CYAN} (soft){Style.RESET_ALL}" if soft else ""
+
+                            print(f"\n{Fore.YELLOW}[CLIENT] 🎯 YOUR TURN{Style.RESET_ALL}")
+                            print(f"[CLIENT] Your total: {Fore.CYAN}{total}{Style.RESET_ALL}{soft_str}")
+                            # Display all player cards with varied suits for visual variety
+                            player_cards_display = ' '.join([format_card(r, i % 4) for i, r in enumerate(player_ranks)])
+                            print(f"[CLIENT] Your cards: {player_cards_display}")
+
+                            bust_prob = deck_counter.bust_probability_if_hit(player_ranks)
+                            prob_color = Fore.RED if bust_prob > 0.6 else Fore.YELLOW if bust_prob > 0.4 else Fore.GREEN
+                            print(f"[CLIENT] {prob_color}📊 Bust chance if Hit: {bust_prob * 100:.1f}%{Style.RESET_ALL}")
+
+                            while True:
+                                choice = input(
+                                    f"{Fore.CYAN}[CLIENT] Your decision (h=Hit / s=Stand): {Style.RESET_ALL}").strip().lower()
+                                if choice == 'h':
+                                    decision = "Hittt"
+                                    break
+                                elif choice == 's':
+                                    decision = "Stand"
+                                    break
+                                else:
+                                    print(f"{Fore.RED}❌ Invalid input. Enter 'h' or 's'.{Style.RESET_ALL}")
+
+                            dec_color = Fore.GREEN if decision == "Stand" else Fore.YELLOW
+                            print(f"[CLIENT] {dec_color}MANUAL decision -> {decision}{Style.RESET_ALL}\n")
+
                         last_decision = decision
                         tcp_sock.sendall(pack_client_payload_decision(decision))
-                        print(f"[CLIENT] decision -> {decision}")
 
                         if decision == "Stand":
                             player_turn = False
